@@ -1,0 +1,54 @@
+name: Build and Deploy LAMP with Docker
+
+# start
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # checkout code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # login Docker Hub
+      - name: Log in to Docker Hub
+        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+      # buile  Docker image
+      - name: Build Docker image
+        run: docker build -t webtext/capstone:latest .
+
+      # push Docker image Docker Hub
+      - name: Push Docker image
+        run: docker push webtext/capstone:latest
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      # ssh login to server
+        
+      - name: SSH to Server and Deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: root
+          key: ${{ secrets.DEPLOY_KEY }}
+          script: |
+            # pull docker image
+            docker pull webtext/capstone:latest
+            
+            # stop running docker 
+            docker stop capstone || true
+
+            # delete old container
+            docker rm capstone || true
+            
+            # run new container
+            docker run -d --name capstone -p 8080:80 webtext/capstone:latest

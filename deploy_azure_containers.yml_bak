@@ -1,0 +1,89 @@
+name: Build and Deploy LAMP with Docker
+
+# start
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # checkout code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # login Docker Hub
+      - name: Log in to Docker Hub
+        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+      # buile  Docker image
+      - name: Build Docker image
+        run: docker build -t webtext/capstone:latest .
+
+      # push Docker image Docker Hub
+      - name: Push Docker image
+        run: docker push webtext/capstone:latest
+  deploy-to-aci:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+        # Step 1: Install Azure CLI
+        #- name: Install Azure CLI
+        #  uses: azure/cli@1
+
+        # Step 2: Log in to Azure using a Service Principal (secrets for AZURE_CREDENTIALS must be set in GitHub repository settings)
+        - name: Log in to Azure
+          uses: azure/login@v1
+          with:
+            creds: ${{ secrets.AZURE_CREDENTIALS }}
+        - name: Create Vnet
+          run: |
+            if ! az network vnet show --resource-group capstoneGroup --name webVNet --output none 2>/dev/null; then
+                az network vnet create \
+                  --resource-group capstoneGroup \
+                  --name webVNet \
+                  --address-prefix 10.0.0.0/16 \
+                  --subnet-name webSubnet \
+                  --subnet-prefix 10.0.1.0/24 \
+            else
+              echo " the vnet aleady existed"
+            fi
+              
+        - name : update Vnet for container
+          run: |
+            az network vnet subnet update \
+              --resource-group capstoneGroup \
+              --vnet-name webVNet \
+              --name webSubnet \
+              --delegations Microsoft.ContainerInstance/containerGroups
+
+        - name: Deploy to ACI web1
+          run: |
+            az container create \
+              --resource-group capstoneGroup \
+              --name website1 \
+              --image docker.io/webtext/capstone:latest \
+              --cpu 2 \
+              --memory 1.5 \
+              --ports 80 \
+              --vnet webVNet \
+              --subnet webSubnet \
+              --ip-address Private \
+              --location canadacentral
+        - name: Deploy to ACI web2
+          run: |
+            az container create \
+              --resource-group capstoneGroup \
+              --name website2 \
+              --image docker.io/webtext/capstone:latest \
+              --cpu 2 \
+              --memory 1.5 \
+              --ports 80 \
+              --vnet webVNet \
+              --subnet webSubnet \
+              --ip-address Private \
+              --location canadacentral

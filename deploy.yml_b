@@ -1,0 +1,26 @@
+name: Deploy to Web Servers
+
+on:
+  push:
+    branches:
+      - main  # Trigger this workflow when there's a push to the 'main' branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up SSH
+      run: |
+        mkdir -p ~/.ssh/
+        echo "$DEPLOY_KEY" | tr -d '\r' > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+
+    - name: Deploy to server 1
+      run: |
+        ssh -o StrictHostKeyChecking=no root@20.220.168.255 "mkdir -p /www/test"
+        rsync -avz --delete ./ root@20.220.168.255:/www/test
+

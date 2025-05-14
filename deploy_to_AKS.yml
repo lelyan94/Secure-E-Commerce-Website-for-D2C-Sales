@@ -1,0 +1,143 @@
+name: Build, Deploy, and Debug AKS Cluster
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Step 2: Log in to Docker Hub
+      - name: Log in to Docker Hub
+        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+      # Step 3: Build Docker image
+      - name: Build Docker image
+        run: docker build -t webtext/capstone:${{ github.sha }} .
+
+      # Step 4: Push Docker image to Docker Hub
+      - name: Push Docker image
+        run: docker push webtext/capstone:${{ github.sha }}
+
+  deploy-to-aks:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 0: Log in to Azure
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          
+          
+      # Step 1: Register Required Azure Resource Providers
+      - name: Register Required Azure Resource Providers
+        run: |
+          az provider register --namespace Microsoft.Insights
+          az provider register --namespace Microsoft.Network
+          az provider register --namespace Microsoft.ContainerService  
+        #  az provider register --namespace Microsoft.OperationsManagement
+        #  az provider register --namespace Microsoft.OperationalInsights
+        #  az provider register --namespace Microsoft.Compute
+        
+      # Step 2: Verify Resource Group and Cluster
+      - name: Verify Resource Group and Cluster
+        run: |
+          az group show --name capstoneGroup || az group create --name capstoneGroup --location canadacentral
+          if ! az aks show --resource-group capstoneGroup --name capstoneAKS > /dev/null 2>&1; then
+            echo "AKS cluster does not exist. Creating..."
+            az aks create \
+              --resource-group capstoneGroup \
+              --name capstoneAKS \
+              --node-count 2 \
+              --enable-addons monitoring \
+              --generate-ssh-keys \
+              --location canadacentral
+          else
+            echo "AKS cluster already exists."
+          fi
+
+      # Step 3: Set up kubectl for AKS
+      - name: Set up kubectl
+        run: |
+          az aks get-credentials --resource-group capstoneGroup --name capstoneAKS --overwrite-existing
+
+      # Step 4: Create Kubernetes Deployment and Service
+      - name: Deploy to AKS
+        run: |
+          kubectl apply -f - <<EOF
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: webtext-deployment
+          spec:
+            replicas: 2
+            selector:
+              matchLabels:
+                app: webtext
+            template:
+              metadata:
+                labels:
+                  app: webtext
+              spec:
+                containers:
+                - name: webtext-container
+                  image: webtext/capstone:${{ github.sha }}
+                  ports:
+                  - containerPort: 80
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: webtext-service
+          spec:
+            selector:
+              app: webtext
+            ports:
+            - protocol: TCP
+              port: 80
+              targetPort: 80
+            type: LoadBalancer
+          EOF
+      # Step 4.5: Update Kubernetes Deployment with new image
+      - name: Update Deployment with New Image
+        run: |
+          kubectl set image deployment/webtext-deployment webtext-container=webtext/capstone:${{ github.sha }}
+          
+      # Step 5: Deploy Horizontal Pod Autoscaler (HPA)
+      - name: Deploy Horizontal Pod Autoscaler
+        run: |
+          kubectl apply -f - <<EOF
+          apiVersion: autoscaling/v2
+          kind: HorizontalPodAutoscaler
+          metadata:
+            name: webtext-hpa
+          spec:
+            scaleTargetRef:
+              apiVersion: apps/v1
+              kind: Deployment
+              name: webtext-deployment
+            minReplicas: 2
+            maxReplicas: 10
+            metrics:
+            - type: Resource
+              resource:
+                name: cpu
+                target:
+                  type: Utilization
+                  averageUtilization: 70
+          EOF
+
+      # Step 6: Verify Deployment
+      - name: Verify Deployment
+        run: |
+          kubectl get all
+          kubectl get hpa
