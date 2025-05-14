@@ -1,5 +1,4 @@
 🛍️ Scalable E-Commerce Cloud Infrastructure
-Capstone Project – Southern Alberta Institute of Technology (SAIT)
 
 📌 Project Overview
 This project showcases the design and deployment of a scalable, secure, and highly available cloud infrastructure for an e-commerce platform. 
@@ -25,6 +24,10 @@ The platform is built to handle peak sales events such as Black Friday, Cyber Mo
 * GitHub Actions (CI/CD)
 * PayPal Gateway Integration
 * Azure B2C (Identity Management)
+
+
+
+
 
 Capstone Project – Southern Alberta Institute of Technology (SAIT)
 Team : Lelyan Saadeh, Quang Minh Dang, Dade Shao, Zoya Rizvi, Jiehua Mai
