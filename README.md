@@ -4,6 +4,8 @@
 This project showcases the design and deployment of a scalable, secure, and highly available cloud infrastructure for an e-commerce platform. 
 The platform is built to handle peak sales events such as Black Friday, Cyber Monday, and Boxing Day, ensuring seamless performance and reliability under heavy traffic.
 
+![Image](https://github.com/user-attachments/assets/3f3f5880-81ec-4cc7-8bec-974c7df73076)
+
 🚀 Key Features: 
 
 * Kubernetes Orchestration (AKS): Automated deployment, scaling, and management of containerized workloads.
